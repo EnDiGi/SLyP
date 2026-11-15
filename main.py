@@ -4,7 +4,7 @@ import yaml
 import pprint
 import sys
 import time
-import dbus
+import platform
 import subprocess
 
 headers = {
@@ -23,7 +23,7 @@ class LyricsPlayer:
         if song.lyrics == []: 
             print("No lyrics!")
             return
-        print(f"Now playing [32m{song}[0m (source: {song.lyrics.source})")
+        print(f"Now playing \033[92m{song}\033[0m (source: {song.lyrics.source})")
         self.playing = True
         startTime = time.perf_counter() - shift
         for line in song.lyrics.lines:
@@ -36,6 +36,10 @@ class LyricsPlayer:
                     endMs = line["end_ms"]
                 else:
                     break
+
+                if time.perf_counter() - startTime > endMs / 1000.0: 
+                    print("lyric jumped")
+                    continue
                 
 
                 while startMs / 1000.0 >= time.perf_counter() - startTime:
@@ -187,38 +191,68 @@ class Song:
 
 
 def getMediaInfo():
+    
+    title, artist, position_sec = "", "", 0.0
 
     try:
-        output = (
-            subprocess.check_output(
-                [
-                    "playerctl",
-                    "metadata",
-                    "--format",
-                    "{{title}}|{{artist}}|{{position}}",
-                ],
-                stderr=subprocess.DEVNULL,
-            )
-            .decode("utf-8")
-            .strip()
-        )
-
-        title, artist, pos_micros = output.split("|")
         
-        position_sec = int(pos_micros) / 1000000
+        operatingSystem = platform.system()
+        
+        if(operatingSystem == "Linux"):
+        
+            output = (
+                subprocess.check_output(
+                    [
+                        "playerctl",
+                        "metadata",
+                        "--format",
+                        "{{title}}|{{artist}}|{{position}}",
+                    ],
+                    stderr=subprocess.DEVNULL,
+                )
+                .decode("utf-8")
+                .strip()
+            )
 
-        return title, artist, position_sec
+            title, artist, pos_micros = output.split("|")
+            
+            position_sec = int(pos_micros) / 1000000
+        
+        elif operatingSystem == "Windows":
+            output = (
+                subprocess.check_output(
+                    [
+                        "powershell.exe", 
+                        "-ExecutionPolicy", 
+                        "Bypass", 
+                        "-File", 
+                        "./getWindowsPlayers.ps1"
+                    ]
+                )
+                .decode("utf-8")
+                .strip()
+            )
+
+            title, artist, positionSecStr = output.split("|")
+
+            position_sec = float(positionSecStr)        
+            
+            
     except Exception:
-        return "", "", 0.0
+        pass
+    finally:
+        return title, artist, position_sec
 
 
 def main():
+
+    deltaTime = 0.1
+
     player = LyricsPlayer()
     
     print(getMediaInfo())
 
-    title, artist, timeSec = "Frosinone", "Calcutta", 0
-    currentSong = Song(title, artist)
+    currentSong = None
     
     if len(sys.argv) > 2:
         currentSong = Song(sys.argv[1], sys.argv[2])
@@ -228,26 +262,30 @@ def main():
     
     try:
         while True:
-            
-            if(player.playing): continue
+
+            start = time.perf_counter()
             
             title, artist, timeSec = getMediaInfo()
-            
-            if(lastTitle == title or not title):
-                time.sleep(1)
+
+            if(
+                title == "" and
+                artist == "" and
+                timeSec == 0.0
+            ):
+                print("Waiting...", end = "\r")
+                time.sleep(deltaTime)
                 continue
-            
-            start = time.perf_counter()
+                    
+            if(lastTitle == title or not title):
+                print("Waiting for new song...", end = "\r")
+                time.sleep(deltaTime)
+                continue
+
             currentSong = Song(title, artist)
             
             lastTitle = currentSong.name
             
-            if(timeSec < 5):
-                print()
-                player.playSong(currentSong, time.perf_counter() - start)
-            else:            
-                print("Waiting...", end = "\r")
-                time.sleep(0.5)
+            player.playSong(currentSong, timeSec + (time.perf_counter() - start))
                 
                 
     except KeyboardInterrupt:
