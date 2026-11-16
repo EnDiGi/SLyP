@@ -1,7 +1,6 @@
 import urllib.parse
 import requests
 import yaml
-import pprint
 import sys
 import time
 import platform
@@ -15,13 +14,13 @@ headers = {
 
 class LyricsPlayer:
     def __init__(self):
-        self.defaultCharDuration = 0.055
+        self.maxCharDuration = 0.08
         self.playing = False
 
     def playSong(self, song, shift=0.0):
         print()
         if song.lyrics == []: 
-            print("No lyrics!")
+            print(f"No lyrics found for {song}!")
             return
         print(f"Now playing \033[92m{song}\033[0m (source: {song.lyrics.source})")
         self.playing = True
@@ -37,20 +36,23 @@ class LyricsPlayer:
                 else:
                     break
 
-                if time.perf_counter() - startTime > endMs / 1000.0: 
-                    print("lyric jumped")
+                if (time.perf_counter() - startTime)*1000 > endMs: 
                     continue
                 
 
-                while startMs / 1000.0 >= time.perf_counter() - startTime:
+                while startMs >= (time.perf_counter() - startTime)*1000:
                     time.sleep(0.001)
-
+                
+                
                 duration = endMs - startMs
                 charDuration = 100000
                 if len(text) != 0:
                     charDuration = duration / len(text) / 1000
 
-                charDuration = min(charDuration, self.defaultCharDuration)
+                charDuration = min(charDuration, self.maxCharDuration)
+
+                if (time.perf_counter() - startTime)*1000 > (2*startMs+endMs)/3: # ms now > 1/3 of duration
+                    charDuration = 0.02
 
                 for char in text:
                     print(char, end="", flush=True)
@@ -62,6 +64,9 @@ class LyricsPlayer:
                 duration = line["duration"]
                 startMs = line["time"]
                 text = line["text"]
+
+                if (time.perf_counter() - startTime)*1000 > startMs + duration: 
+                    continue
 
                 while startMs / 1000 >= time.perf_counter() - startTime:
                     time.sleep(0.001)
@@ -92,7 +97,7 @@ class LyricsPlayer:
                     print()
 
         self.playing = False
-        print("Song ended!\n")
+        print("\nSong ended!\n")
 
 
 class Lyrics:
@@ -142,7 +147,7 @@ class Song:
         def makeRequest(url, customSiteName=""):
 
             try:
-                response = requests.get(url, headers=headers, timeout = 0.7)
+                response = requests.get(url, headers=headers, timeout = 1)
 
                 if response.status_code == 200:
                     print(f"Song successfully loaded from {customSiteName}!")
@@ -151,7 +156,7 @@ class Song:
                     print(f"Error fetching {customSiteName}: {response.status_code}")
                 
             except requests.exceptions.Timeout:
-                print("API took too long to respond")
+                print(customSiteName, "API took too long to respond")
             except requests.exceptions.RequestException as e:
                 print(f"Error: {e}")
             return {}
@@ -226,13 +231,13 @@ def getMediaInfo():
                         "-ExecutionPolicy", 
                         "Bypass", 
                         "-File", 
-                        "./getWindowsPlayers.ps1"
+                        "./getPlayerInfoWindows.ps1"
                     ]
                 )
                 .decode("utf-8")
                 .strip()
             )
-
+            
             title, artist, positionSecStr = output.split("|")
 
             position_sec = float(positionSecStr)        
@@ -246,25 +251,23 @@ def getMediaInfo():
 
 def main():
 
-    deltaTime = 0.1
+    deltaTime = 0.5
 
     player = LyricsPlayer()
-    
-    print(getMediaInfo())
 
     currentSong = None
     
     if len(sys.argv) > 2:
         currentSong = Song(sys.argv[1], sys.argv[2])
         player.playSong(currentSong)
+        return 0
     
     lastTitle = ""
     
     try:
         while True:
-
-            start = time.perf_counter()
             
+            start = time.perf_counter()
             title, artist, timeSec = getMediaInfo()
 
             if(
@@ -272,24 +275,25 @@ def main():
                 artist == "" and
                 timeSec == 0.0
             ):
-                print("Waiting...", end = "\r")
+                print("Waiting for a song to play...", end = "\r")
                 time.sleep(deltaTime)
                 continue
                     
             if(lastTitle == title or not title):
-                print("Waiting for new song...", end = "\r")
+                print("Waiting for a new song to play...", end = "\r")
                 time.sleep(deltaTime)
                 continue
 
             currentSong = Song(title, artist)
             
             lastTitle = currentSong.name
-            
+
+            print()
             player.playSong(currentSong, timeSec + (time.perf_counter() - start))
                 
                 
     except KeyboardInterrupt:
-        print("Program termined")
+        print("\nProgram termined")
 
 if __name__ == "__main__":
     main()
