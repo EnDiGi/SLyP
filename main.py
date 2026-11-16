@@ -147,18 +147,23 @@ class Song:
         def makeRequest(url, customSiteName=""):
 
             try:
+                
+                print(f"Fetching data for {self.__str__()}...")
+                
                 response = requests.get(url, headers=headers, timeout = 1)
 
                 if response.status_code == 200:
                     print(f"Song successfully loaded from {customSiteName}!")
                     return response.json()
                 else:
-                    print(f"Error fetching {customSiteName}: {response.status_code}")
+                    print(f"Error fetching from {customSiteName}: {response.status_code}")
                 
             except requests.exceptions.Timeout:
                 print(customSiteName, "API took too long to respond")
             except requests.exceptions.RequestException as e:
                 print(f"Error: {e}")
+            finally:
+                print()
             return {}
 
         lrclibUrl = "https://lrclib.net/api/get?"
@@ -250,6 +255,8 @@ def getMediaInfo():
 
 
 def main():
+    
+    print("====== SLyP ======\n")
 
     deltaTime = 0.5
 
@@ -287,13 +294,12 @@ def main():
             currentSong = Song(title, artist)
             
             lastTitle = currentSong.name
-
-            print()
+            
             player.playSong(currentSong, timeSec + (time.perf_counter() - start))
                 
                 
     except KeyboardInterrupt:
-        print("\nProgram termined")
+        print("\n\nProgram termined")
 
 if __name__ == "__main__":
     main()
