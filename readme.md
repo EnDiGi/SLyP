@@ -14,6 +14,7 @@ python3 main.py song_name artist_name
 
 If any of these arguments isn't specified, the program will enter live mode, playing the lyrics from the currently playing song on spotify
 ## How it works
-The program fetches the songs' data from [lrclib.net](https://lrclib.net) and then tries fecthing data from `lyricsplus`, a smaller library that can provide word for word lyrics
+The program fetches the songs' data from [lrclib.net](https://lrclib.net) and then tries fecthing data from `lyricsplus`, a smaller library that can provide word for word lyrics.  
+The program also checks the system player to see if Spotify is playing. If it is, it will try to fetch the currently playing song's data to play its lyrics.
 ## Requirements
 You need to have python installed on your machine and also the `PyYAML` module
